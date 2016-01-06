@@ -1,13 +1,7 @@
 package com.x.agile.px.exportdata.action;
 
-import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
 
 import org.apache.log4j.Logger;
 import org.apache.log4j.PropertyConfigurator;
@@ -32,17 +26,7 @@ public class ExportSendAglDataAction implements ICustomAction {
 
 	public ActionResult doAction(IAgileSession aglSession, INode node, IDataObject dataObj) {
 		ActionResult actRes = null;
-		//IObjectEventInfo eventInfoObj = (IObjectEventInfo) eventInfo;
 		IChange chgObj = null;
-		
-		try {
-			PropertyConfigurator.configure(Utils.loadPropertyFile("D:/Agile/Agile934/integration/sdk/extensions/log4j.properties"));
-		} catch (FileNotFoundException e1) {
-			e1.printStackTrace();
-		} catch (IOException e1) {
-			e1.printStackTrace();
-		}
-		
 		Logger logger = Logger.getLogger(ExportSendAglDataAction.class);
 		logger.info("ExportFTPAgileData Starts for Change ::"+chgObj);
 		try {
@@ -69,23 +53,45 @@ public class ExportSendAglDataAction implements ICustomAction {
 		return actRes;
 	}
 
-	/*public static void main (String [] args){
+	public static void main (String [] args){
+		
+		System.out.println("start");
+		try {
+			//PropertyConfigurator.configure(Utils.loadPropertyFile("D:/Agile/Agile934/integration/sdk/extensions/log4j.properties"));
+			//PropertyConfigurator.configure(Utils.loadPropertyFile("./log4j.properties"));
+			Logger logger = Logger.getLogger(ExportSendAglDataAction.class);
+			logger.info("Form Main" );
+			ProcessBO bo = new ProcessBO();
+			bo.init();
+		} /*catch (FileNotFoundException e1) {
+			e1.printStackTrace();
+		} catch (IOException e1) {
+			e1.printStackTrace();
+		}*/
+		catch(Exception e){
+			e.printStackTrace();
+		}
+		Logger logger = Logger.getLogger(ExportSendAglDataAction.class);
+		logger.info("ExportFTPAgileData Starts for Change");
+		
+		System.out.println("End");
+		
 		//List<String> rowdata = Arrays.asList("Vikram","Garg");
-		Map <String,List<String>> dataMap = new HashMap<String,List<String>>();
-		dataMap.put("1", Arrays.asList("Vikram","Garg"));
+		//Map <String,List<String>> dataMap = new HashMap<String,List<String>>();
+		//dataMap.put("1", Arrays.asList("Vikram","Garg"));
 		//dataMap.put("2", Arrays.asList("Anchal","Jain"));
 		//dataMap.put("3", Arrays.asList("Aashni","G"));
 		//dataMap.put("4", Arrays.asList("Shivi","Mam"));
-		try {
+		/*try {
 			File file = Utils.getCSVFile("FamilyName.txt", dataMap, Arrays.asList("First Name","Last Name"), ",", ";", null);
 			//Utils.sendEmail(file, new Properties());
 			Utils.ftpFile(file, "ftp.bacsexperts.com", "fileload", "2uploadfiles", logger);
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
-		}
+		}*/
 		
-	}*/
+	}
 	
 	
 }

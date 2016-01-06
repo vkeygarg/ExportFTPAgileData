@@ -1,18 +1,23 @@
 package com.x.agile.px.exportdata.bo;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Calendar;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
-import java.util.StringTokenizer;
+import java.util.TreeMap;
 
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.math.NumberUtils;
@@ -34,21 +39,36 @@ import com.x.agile.px.exportdata.util.Utils;
  */
 public class ProcessBO {
 
+	Properties masProp;
 	Properties prop;
-	Properties attrProp;
+	Map<String,String> attrPropMap;
 	final static Logger logger = Logger.getLogger(ProcessBO.class);
 	Map<String, List<String>> errorMap = null;
 	List<String> headerList = null;
+	Map<String,String> attrModPropMap;
+	List<String> headerModList = null;
 	String DELIMITER = "|";
+	String timeStamp ="";
+	
+	
+
 
 	public void init() throws IOException {
 		errorMap = new HashMap<String, List<String>>();
-		PropertyConfigurator.configure(Utils.loadPropertyFile("D:/Agile/Agile934/integration/sdk/extensions/log4j.properties"));
-		prop = Utils.loadPropertyFile("D:/Agile/Agile934/integration/sdk/extensions/config.properties");
-		attrProp = Utils.loadPropertyFile("D:/Agile/Agile934/integration/sdk/extensions/attributeConfig.properties");
-		headerList = new ArrayList<String>();
-		headerList.addAll(attrProp.stringPropertyNames());
+		masProp = Utils.loadPropertyFile("./ExportFTPAgileData.properties");
+		logger.info("Mas Prop Loaded: "+masProp.getProperty("PROPERTY_FILE_PATH"));
+		prop = Utils.loadPropertyFile(masProp.getProperty("PROPERTY_FILE_PATH")+"ExportFTPAgileDataConfig.properties");
+		logger.info("Main Config file loaded:"+prop.getProperty("AGL_REST_CALL_URL"));
+		attrPropMap = Utils.loadSortedAttrMap(masProp.getProperty("PROPERTY_FILE_PATH")+"ExportFTPAgileDataAttribute.properties");
+		attrModPropMap = Utils.loadSortedAttrMap(masProp.getProperty("PROPERTY_FILE_PATH")+"ExportFTPAgileDataModuleAttribute.properties");
+		logger.info(attrPropMap.size());
+		headerList = Utils.getSortedHeaderList(attrPropMap);
+		headerModList = Utils.getSortedHeaderList(attrModPropMap);
 		DELIMITER = prop.getProperty("DATA_CSV_DELIMITER");
+		Calendar calobj = Calendar.getInstance();
+		DateFormat df = new SimpleDateFormat("yyMMddHHmmss");
+		timeStamp = df.format(calobj.getTime());
+		logger.info("Triggered at:"+timeStamp);
 	}
 
 	public void processRequest(IChange chgObj) throws APIException, CustomException, Exception {
@@ -56,35 +76,45 @@ public class ProcessBO {
 		logger.info("# of affected items to process:" + affTable.size());
 		ITwoWayIterator affItr = affTable.getReferentIterator();
 		IItem affItemObj = null;
-
-		
-		List<String> headerList = new ArrayList<String>();
-		Set<String> propSet = attrProp.stringPropertyNames();
-		Iterator<String> propItr = propSet.iterator();
-		while (propItr.hasNext()) {
-			headerList.add(propItr.next());
-		}
-		
-		
 		Map<String, List<String>> itemsMap = new HashMap<String, List<String>>();
 		List<String> attrList = null;
 		
+		Map<String, List<String>> itemsMapMod = new HashMap<String, List<String>>();
+		List<String> attrListMod = null;
+		String lmsID = "";
+		Object lmsVal = null;
 		while (affItr.hasNext()) {
 			affItemObj = (IItem) affItr.next();
-			logger.info("Affected Item: " + affItemObj.getName());
-			attrList = getItemAttrList(affItemObj);
-			itemsMap.put(affItemObj.getName(), attrList);
+			lmsID=prop.getProperty(affItemObj.getAgileClass().getSuperClass().getName().toUpperCase()+".PAGE2.LMSFLAG");
+			lmsVal = affItemObj.getValue(NumberUtils.isNumber(lmsID) ? Integer.parseInt(lmsID) : lmsID);
+			logger.info("Affected Item: " + affItemObj.getName() + " LMS Flag:"+lmsVal);
+			
+			if (lmsVal != null && prop.getProperty("LMS_VAL_TO_EXTRACT_DATA").equalsIgnoreCase(lmsVal.toString())) {
+				attrList = getItemAttrList(affItemObj, attrPropMap);
+				itemsMap.put(affItemObj.getName(), attrList);
+
+				attrListMod = getItemAttrList(affItemObj, attrModPropMap);
+				itemsMapMod.put(affItemObj.getName(), attrListMod);
+			}
 		}
 
 		File csvFile = null;
 		if (errorMap.isEmpty()) {
 			if (!itemsMap.isEmpty())
-				csvFile = Utils.getCSVFile("./"+prop.getProperty("DATA_CSV_FILE_NAME"),
+				csvFile = Utils.getCSVFile(masProp.getProperty("CSV_FILE_PATH")+prop.getProperty("DATA_CSV_FILE_NAME")+timeStamp,
 						itemsMap, headerList, prop.getProperty("DATA_CSV_DELIMITER"), prop.getProperty("DATA_CSV_EOR"), prop.getProperty("DATA_CSV_EOF"));
-
-		if (csvFile != null)
+			if (csvFile != null)
 				Utils.ftpFile(csvFile, prop.getProperty("ftp.location"), prop.getProperty("ftp.user"), prop.getProperty("ftp.password"), logger);
+			
+			if (!itemsMapMod.isEmpty())
+				csvFile = Utils.getCSVFile(masProp.getProperty("CSV_FILE_PATH")+prop.getProperty("DATA_MODULE_CSV_FILE_NAME")+timeStamp,
+						itemsMapMod, headerModList, prop.getProperty("DATA_CSV_DELIMITER"), prop.getProperty("DATA_CSV_EOR"), prop.getProperty("DATA_CSV_EOF"));
+			if (csvFile != null)
+				Utils.ftpFile(csvFile, prop.getProperty("ftp.location"), prop.getProperty("ftp.user"), prop.getProperty("ftp.password"), logger);
+		
+			
 		} else {
+			logger.info("Missing data is: "+errorMap);
 			csvFile = Utils.getCSVFile("./"+prop.getProperty("ERROR_CSV_FILE_NAME").replace("{change}", chgObj.getName()),errorMap, 
 					Arrays.asList("Item Number", "Attribute Name"), prop.getProperty("DATA_CSV_DELIMITER"), null, null);
 			if (csvFile != null) {
@@ -94,10 +124,10 @@ public class ProcessBO {
 		}
 	}
 
-	private List<String> getItemAttrList(IItem affItemObj) throws NumberFormatException, APIException {
+	private List<String> getItemAttrList(IItem affItemObj, Map<String,String> attrProp) throws NumberFormatException, APIException {
 		List<String> itemDtls = new ArrayList<String>();
 
-		Set<String> propSet = attrProp.stringPropertyNames();
+		Set<String> propSet = attrProp.keySet();
 		
 		Iterator<String> propItr = propSet.iterator();
 		String attrKey = null;
@@ -106,12 +136,12 @@ public class ProcessBO {
 			Object itemAttrAglVal = null;
 			Object aglVal = null;
 			attrKey = propItr.next();
-			String [] attrProps = attrProp.getProperty(attrKey).split(";");
+			String [] attrProps = attrProp.get(attrKey).split(";");
 			int propNo = 1;
 			for(String attrprop : attrProps){
 				switch (propNo) {
 				case 1  : 
-					logger.info(attrKey + ": ist  Token-"+attrprop);
+					logger.info(attrKey + ": 1st  Token-"+attrprop);
 					itemAttrAglVal = attrprop;
 					break;
 				case 2  :
@@ -200,43 +230,36 @@ public class ProcessBO {
 	}
 
 	private void logMissingData(String itemName, String attrKey) {
+		String keyVal = attrKey.substring(attrKey.indexOf("_")+1, attrKey.length());
 		if (errorMap.containsKey(itemName)) {
-			errorMap.get(itemName).add(attrKey);
+			errorMap.get(itemName).add(keyVal);
 		} else {
 			List<String> colList = new ArrayList<String>();
 			colList.add(itemName);
-			colList.add(attrKey);
+			colList.add(keyVal);
 			errorMap.put(itemName, colList);
 		}
 	}
 	
-	public void printAttr (){
-		Set<String> propSet = attrProp.stringPropertyNames();
-		System.out.println(propSet.size());
-		Iterator<String> propItr = propSet.iterator();
-		String attrKey = null;
-		while (propItr.hasNext()) {
-			attrKey = propItr.next();
-			logger.info(attrProp.getProperty(attrKey));
-			String [] attrProps = attrProp.getProperty(attrKey).split(";");
-			int propNo = 1;
-			for(String attrprop : attrProps){
-				switch (propNo) {
-				case 1  : 
-					logger.info(attrKey + ": ist  Token-"+attrprop);
-					break;
-				case 2  :
-					logger.info(attrKey + ": 2nd  Token-"+attrprop);
-					break;
-				
-				case 3 : 
-					logger.info(attrKey + ": 3rd  Token-"+attrprop);
-					break;
-				}
-				propNo++;
+	public void printAttr() {
+
+		BufferedReader br = null;
+		Map<String, String> propMap = new TreeMap<String, String>();
+		try {
+			br = new BufferedReader(
+					new FileReader("D:/Agile/Agile934/integration/sdk/extensions/attributeConfig.properties"));
+			String line = br.readLine();
+			while (line != null && !line.isEmpty()) {
+				String key = line.split("=")[0];
+				String val = line.split("=")[1];
+				propMap.put(key, val);
+				line = br.readLine();
 			}
+		} catch (Exception e) {
 		}
-		}
+		System.out.println(propMap);
+
+	}
 	
 	public static void main(String [] args){
 		ProcessBO ob = new ProcessBO();

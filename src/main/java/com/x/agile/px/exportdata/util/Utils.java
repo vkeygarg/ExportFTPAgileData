@@ -1,19 +1,23 @@
 package com.x.agile.px.exportdata.util;
 
+import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
-import java.io.FileWriter;
+import java.io.FileReader;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.TreeMap;
 
 import javax.activation.DataHandler;
 import javax.activation.DataSource;
@@ -22,7 +26,6 @@ import javax.mail.BodyPart;
 import javax.mail.Message;
 import javax.mail.MessagingException;
 import javax.mail.Multipart;
-import javax.mail.PasswordAuthentication;
 import javax.mail.Session;
 import javax.mail.Transport;
 import javax.mail.internet.InternetAddress;
@@ -33,8 +36,6 @@ import javax.mail.internet.MimeMultipart;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.net.ftp.FTPClient;
 import org.apache.log4j.Logger;
-
-import com.agile.common.IOUtils;
 
 public class Utils {
 
@@ -191,5 +192,46 @@ public class Utils {
 		}
 		return prop;
 	}
+	
+	public static
+	<T extends Comparable<? super T>> List<T> asSortedList(Collection<T> c) {
+	  List<T> list = new ArrayList<T>(c);
+	  java.util.Collections.sort(list);
+	  return list;
+	}
 
+	public static Map<String, String> loadSortedAttrMap(String propFileName) throws IOException {
+		BufferedReader br = null;
+		Map<String,String> propMap = new TreeMap<String, String>();
+		try{
+		br = new BufferedReader(new FileReader(propFileName));
+			String line = br.readLine();
+			while (line != null && !line.isEmpty()) {
+				if (!line.startsWith("#")) {
+					String key = line.split("=")[0];
+					String val = line.split("=")[1];
+					propMap.put(key, val);
+				}
+				line = br.readLine();
+			}
+		}catch(IOException e){
+			throw e;
+		}
+		finally{
+			if(br!=null)
+				br.close();
+		}
+			return propMap;
+	}
+
+	public static List<String> getSortedHeaderList(Map<String, String> attrPropMap) {
+		List<String> sortedList = new ArrayList<String>();
+		Iterator<String> itr = attrPropMap.keySet().iterator();
+		String key = "";
+		while(itr.hasNext()){
+			key = itr.next();
+			sortedList.add(key.substring(key.indexOf("_")+1, key.length()));
+		}
+		return sortedList;
+	}
 }
