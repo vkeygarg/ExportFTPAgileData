@@ -37,6 +37,10 @@ import org.apache.commons.lang.StringUtils;
 import org.apache.commons.net.ftp.FTPClient;
 import org.apache.log4j.Logger;
 
+import com.jcraft.jsch.Channel;
+import com.jcraft.jsch.ChannelSftp;
+import com.jcraft.jsch.JSch;
+
 public class Utils {
 
 	public static File getCSVFile(String fileName, Map<String, List<String>> dataMap, List<String> headerList,
@@ -89,7 +93,7 @@ public class Utils {
 		return file;
 	}
 
-	public static void ftpFile(File affItemsCSV,String ftpPath, String ftpUser, String ftpPassword,Logger log) throws IOException {
+	public static void ftpFile(File affItemsCSV,String ftpLoc, String ftpPath, String ftpUser, String ftpPassword,Logger log) throws IOException {
 		FTPClient client = new FTPClient();
 		FileInputStream fis = null;
 
@@ -100,7 +104,8 @@ public class Utils {
 		    String filename = affItemsCSV.getAbsolutePath();
 		    
 		    fis = new FileInputStream(filename);
-		    client.storeFile(affItemsCSV.getName(), fis);
+		    log.info(ftpLoc+affItemsCSV.getName());
+		    client.storeFile(ftpLoc+affItemsCSV.getName(), fis);
 		    log.info("File Sent");
 		    client.logout();
 		} catch (IOException e) {
@@ -234,4 +239,44 @@ public class Utils {
 		}
 		return sortedList;
 	}
+	
+	
+	
+	public static  void sendSFTP (File file, Properties props, Logger log) {
+        String SFTPHOST = props.getProperty("SFTP_HOST_NAME");//"sftp10.successfactors.com";
+        int SFTPPORT = Integer.parseInt(props.getProperty("SFTP_PORT"));//22;
+        String SFTPUSER = props.getProperty("SFTP_USER");//"biosensors-stage";
+        String SFTPPASS = props.getProperty("SFTP_PASSWORD");//"afE7TWP0ExzTi";
+        String SFTPWORKINGDIR = props.getProperty("SFTP_DESTINATION_LOCATION");//"/incoming/";
+
+        com.jcraft.jsch.Session session = null;
+        Channel channel = null;
+        ChannelSftp channelSftp = null;
+        log.info("preparing the host information for sftp.");
+        try {
+            JSch jsch = new JSch();
+            session = jsch.getSession(SFTPUSER, SFTPHOST, SFTPPORT);
+            session.setPassword(SFTPPASS);
+            java.util.Properties config = new java.util.Properties();
+            config.put("StrictHostKeyChecking", "no");
+            session.setConfig(config);
+            session.connect();
+            log.info("Host connected.");
+            channel = session.openChannel("sftp");
+            channel.connect();
+            log.info("sftp channel opened and connected.");
+            channelSftp = (ChannelSftp) channel;
+            channelSftp.cd(SFTPWORKINGDIR);
+            channelSftp.put(new FileInputStream(file), file.getName());
+            log.info("File transfered successfully to host.");
+        } catch (Exception ex) {
+             log.error("Exception found while tranfer the response.",ex);
+        }
+        finally{
+            channelSftp.exit();
+            channel.disconnect();
+            session.disconnect();
+            log.info("Host Session disconnected.");
+        }
+    } 
 }

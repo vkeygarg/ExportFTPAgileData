@@ -27,11 +27,12 @@ public class ExportSendAglDataAction implements ICustomAction {
 	public ActionResult doAction(IAgileSession aglSession, INode node, IDataObject dataObj) {
 		ActionResult actRes = null;
 		IChange chgObj = null;
+		try{
+		PropertyConfigurator.configure(Utils.loadPropertyFile(System.getenv("AGILE_PROPERTIES")+"\\ExportFTPAgileDatalog4j.properties"));
 		Logger logger = Logger.getLogger(ExportSendAglDataAction.class);
-		logger.info("ExportFTPAgileData Starts for Change ::"+chgObj);
 		try {
-			
 			chgObj = (IChange) dataObj;
+			logger.info("ExportFTPAgileData Starts for Change ::"+chgObj);
 			ProcessBO boObj = new ProcessBO();
 			boObj.init();
 			boObj.processRequest(chgObj);
@@ -49,49 +50,53 @@ public class ExportSendAglDataAction implements ICustomAction {
 		} catch (Exception e) {
 			logger.error(e.getMessage(), e);
 			actRes = new ActionResult(ActionResult.EXCEPTION, e);
+		}}
+		catch(IOException e){
+			actRes = new ActionResult(ActionResult.EXCEPTION, e);
 		}
 		return actRes;
 	}
 
-	public static void main (String [] args){
+	/*public static void main (String [] args){
 		
 		System.out.println("start");
 		try {
-			//PropertyConfigurator.configure(Utils.loadPropertyFile("D:/Agile/Agile934/integration/sdk/extensions/log4j.properties"));
-			//PropertyConfigurator.configure(Utils.loadPropertyFile("./log4j.properties"));
-			Logger logger = Logger.getLogger(ExportSendAglDataAction.class);
+		PropertyConfigurator.configure(Utils.loadPropertyFile(System.getenv("AGILE_PROPERTIES")+"\\ExportFTPAgileDatalog4j.properties"));
+		Logger logger = Logger.getLogger(ExportSendAglDataAction.class);
 			logger.info("Form Main" );
 			ProcessBO bo = new ProcessBO();
 			bo.init();
-		} /*catch (FileNotFoundException e1) {
+			logger.info("ExportFTPAgileData Starts for Change");
+		} catch (FileNotFoundException e1) {
 			e1.printStackTrace();
 		} catch (IOException e1) {
 			e1.printStackTrace();
-		}*/
+		}
 		catch(Exception e){
 			e.printStackTrace();
 		}
-		Logger logger = Logger.getLogger(ExportSendAglDataAction.class);
-		logger.info("ExportFTPAgileData Starts for Change");
+		
 		
 		System.out.println("End");
 		
-		//List<String> rowdata = Arrays.asList("Vikram","Garg");
-		//Map <String,List<String>> dataMap = new HashMap<String,List<String>>();
-		//dataMap.put("1", Arrays.asList("Vikram","Garg"));
-		//dataMap.put("2", Arrays.asList("Anchal","Jain"));
-		//dataMap.put("3", Arrays.asList("Aashni","G"));
-		//dataMap.put("4", Arrays.asList("Shivi","Mam"));
-		/*try {
+		List<String> rowdata = Arrays.asList("Vikram","Garg");
+		Map <String,List<String>> dataMap = new HashMap<String,List<String>>();
+		dataMap.put("1", Arrays.asList("Vikram","Garg"));
+		dataMap.put("2", Arrays.asList("Anchal","Jain"));
+		dataMap.put("3", Arrays.asList("Aashni","G"));
+		dataMap.put("4", Arrays.asList("Shivi","Mam"));
+		try {
 			File file = Utils.getCSVFile("FamilyName.txt", dataMap, Arrays.asList("First Name","Last Name"), ",", ";", null);
 			//Utils.sendEmail(file, new Properties());
-			Utils.ftpFile(file, "ftp.bacsexperts.com", "fileload", "2uploadfiles", logger);
+			//Utils.ftpFile(file, "/Test/","ftp.bacsexperts.com", "fileload", "2uploadfiles", logger);
+			
+			Utils.sendSFTP(file,Utils.loadPropertyFile(System.getenv("AGILE_PROPERTIES")+"\\ExportFTPAgileDataConfig.properties"),logger);
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
-		}*/
+		}
 		
-	}
+	}*/
 	
 	
 }

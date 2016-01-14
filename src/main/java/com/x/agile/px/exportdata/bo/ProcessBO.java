@@ -39,7 +39,6 @@ import com.x.agile.px.exportdata.util.Utils;
  */
 public class ProcessBO {
 
-	Properties masProp;
 	Properties prop;
 	Map<String,String> attrPropMap;
 	final static Logger logger = Logger.getLogger(ProcessBO.class);
@@ -55,12 +54,11 @@ public class ProcessBO {
 
 	public void init() throws IOException {
 		errorMap = new HashMap<String, List<String>>();
-		masProp = Utils.loadPropertyFile("./ExportFTPAgileData.properties");
-		logger.info("Mas Prop Loaded: "+masProp.getProperty("PROPERTY_FILE_PATH"));
-		prop = Utils.loadPropertyFile(masProp.getProperty("PROPERTY_FILE_PATH")+"ExportFTPAgileDataConfig.properties");
+		logger.info(System.getenv("AGILE_PROPERTIES"));
+		prop = Utils.loadPropertyFile(System.getenv("AGILE_PROPERTIES")+"\\ExportFTPAgileDataConfig.properties");
 		logger.info("Main Config file loaded:"+prop.getProperty("AGL_REST_CALL_URL"));
-		attrPropMap = Utils.loadSortedAttrMap(masProp.getProperty("PROPERTY_FILE_PATH")+"ExportFTPAgileDataAttribute.properties");
-		attrModPropMap = Utils.loadSortedAttrMap(masProp.getProperty("PROPERTY_FILE_PATH")+"ExportFTPAgileDataModuleAttribute.properties");
+		attrPropMap = Utils.loadSortedAttrMap(System.getenv("AGILE_PROPERTIES")+"\\ExportFTPAgileDataAttribute.properties");
+		attrModPropMap = Utils.loadSortedAttrMap(System.getenv("AGILE_PROPERTIES")+"\\ExportFTPAgileDataModuleAttribute.properties");
 		logger.info(attrPropMap.size());
 		headerList = Utils.getSortedHeaderList(attrPropMap);
 		headerModList = Utils.getSortedHeaderList(attrModPropMap);
@@ -101,17 +99,19 @@ public class ProcessBO {
 		File csvFile = null;
 		if (errorMap.isEmpty()) {
 			if (!itemsMap.isEmpty())
-				csvFile = Utils.getCSVFile(masProp.getProperty("CSV_FILE_PATH")+prop.getProperty("DATA_CSV_FILE_NAME")+timeStamp,
+				csvFile = Utils.getCSVFile(prop.getProperty("CSV_FILE_PATH")+prop.getProperty("DATA_CSV_FILE_NAME")+timeStamp,
 						itemsMap, headerList, prop.getProperty("DATA_CSV_DELIMITER"), prop.getProperty("DATA_CSV_EOR"), prop.getProperty("DATA_CSV_EOF"));
-			if (csvFile != null)
-				Utils.ftpFile(csvFile, prop.getProperty("ftp.location"), prop.getProperty("ftp.user"), prop.getProperty("ftp.password"), logger);
-			
+			if (csvFile != null){
+				//Utils.ftpFile(csvFile,prop.getProperty("ftp.location"), prop.getProperty("ftp.host"), prop.getProperty("ftp.user"), prop.getProperty("ftp.password"), logger);
+				Utils.sendSFTP(csvFile, prop, logger);
+			}
 			if (!itemsMapMod.isEmpty())
-				csvFile = Utils.getCSVFile(masProp.getProperty("CSV_FILE_PATH")+prop.getProperty("DATA_MODULE_CSV_FILE_NAME")+timeStamp,
+				csvFile = Utils.getCSVFile(prop.getProperty("CSV_FILE_PATH")+prop.getProperty("DATA_MODULE_CSV_FILE_NAME")+timeStamp,
 						itemsMapMod, headerModList, prop.getProperty("DATA_CSV_DELIMITER"), prop.getProperty("DATA_CSV_EOR"), prop.getProperty("DATA_CSV_EOF"));
-			if (csvFile != null)
-				Utils.ftpFile(csvFile, prop.getProperty("ftp.location"), prop.getProperty("ftp.user"), prop.getProperty("ftp.password"), logger);
-		
+			if (csvFile != null){
+				//Utils.ftpFile(csvFile,prop.getProperty("ftp.location"), prop.getProperty("ftp.host"), prop.getProperty("ftp.user"), prop.getProperty("ftp.password"), logger);
+				Utils.sendSFTP(csvFile, prop, logger);
+			}
 			
 		} else {
 			logger.info("Missing data is: "+errorMap);
