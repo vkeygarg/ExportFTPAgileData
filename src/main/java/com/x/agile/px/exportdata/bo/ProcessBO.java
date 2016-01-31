@@ -6,7 +6,9 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
+import java.nio.file.Path;
 import java.text.DateFormat;
+import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -26,12 +28,17 @@ import org.apache.log4j.PropertyConfigurator;
 
 import com.agile.api.APIException;
 import com.agile.api.ChangeConstants;
+import com.agile.api.DataTypeConstants;
+import com.agile.api.IAgileSession;
+import com.agile.api.ICell;
 import com.agile.api.IChange;
 import com.agile.api.IItem;
 import com.agile.api.ITable;
 import com.agile.api.ITwoWayIterator;
+import com.agile.api.ItemConstants;
 import com.x.agile.px.exportdata.exception.CustomException;
 import com.x.agile.px.exportdata.util.Utils;
+import com.x.agile.px.exportdata.vo.EmailVO;
 
 /**
  * Description: Process Extension class holds implemented business logic
@@ -48,13 +55,15 @@ public class ProcessBO {
 	List<String> headerModList = null;
 	String DELIMITER = "|";
 	String timeStamp ="";
+	IAgileSession aglSession = null;
 	
 	
 
 
-	public void init() throws IOException {
+	public void init(IAgileSession session) throws IOException {
 		errorMap = new HashMap<String, List<String>>();
 		logger.info(System.getenv("AGILE_PROPERTIES"));
+		aglSession = session;
 		prop = Utils.loadPropertyFile(System.getenv("AGILE_PROPERTIES")+"\\ExportFTPAgileDataConfig.properties");
 		logger.info("Main Config file loaded:"+prop.getProperty("AGL_REST_CALL_URL"));
 		attrPropMap = Utils.loadSortedAttrMap(System.getenv("AGILE_PROPERTIES")+"\\ExportFTPAgileDataAttribute.properties");
@@ -90,84 +99,119 @@ public class ProcessBO {
 			if (lmsVal != null && prop.getProperty("LMS_VAL_TO_EXTRACT_DATA").equalsIgnoreCase(lmsVal.toString())) {
 				attrList = getItemAttrList(affItemObj, attrPropMap);
 				itemsMap.put(affItemObj.getName(), attrList);
-
+				logger.info("Getting Attribute details for : "+affItemObj.getName());
 				attrListMod = getItemAttrList(affItemObj, attrModPropMap);
 				itemsMapMod.put(affItemObj.getName(), attrListMod);
 			}
 		}
 
-		File csvFile = null;
+		Path csvFile = null;
 		if (errorMap.isEmpty()) {
+			logger.info("Generating data files for "+chgObj.getName()+" at "+timeStamp);
 			if (!itemsMap.isEmpty())
 				csvFile = Utils.getCSVFile(prop.getProperty("CSV_FILE_PATH")+prop.getProperty("DATA_CSV_FILE_NAME")+timeStamp,
-						itemsMap, headerList, prop.getProperty("DATA_CSV_DELIMITER"), prop.getProperty("DATA_CSV_EOR"), prop.getProperty("DATA_CSV_EOF"));
+						itemsMap, headerList, prop.getProperty("DATA_CSV_DELIMITER"), prop.getProperty("DATA_CSV_EOR"), prop.getProperty("DATA_CSV_EOF"),logger);
 			if (csvFile != null){
 				//Utils.ftpFile(csvFile,prop.getProperty("ftp.location"), prop.getProperty("ftp.host"), prop.getProperty("ftp.user"), prop.getProperty("ftp.password"), logger);
-				Utils.sendSFTP(csvFile, prop, logger);
+				//Utils.sendSFTP(csvFile, prop, logger);
 			}
 			if (!itemsMapMod.isEmpty())
 				csvFile = Utils.getCSVFile(prop.getProperty("CSV_FILE_PATH")+prop.getProperty("DATA_MODULE_CSV_FILE_NAME")+timeStamp,
-						itemsMapMod, headerModList, prop.getProperty("DATA_CSV_DELIMITER"), prop.getProperty("DATA_CSV_EOR"), prop.getProperty("DATA_CSV_EOF"));
+						itemsMapMod, headerModList, prop.getProperty("DATA_CSV_DELIMITER"), prop.getProperty("DATA_CSV_EOR"), prop.getProperty("DATA_CSV_EOF"), logger);
 			if (csvFile != null){
 				//Utils.ftpFile(csvFile,prop.getProperty("ftp.location"), prop.getProperty("ftp.host"), prop.getProperty("ftp.user"), prop.getProperty("ftp.password"), logger);
-				Utils.sendSFTP(csvFile, prop, logger);
+				//Utils.sendSFTP(csvFile, prop, logger);
 			}
 			
 		} else {
-			logger.info("Missing data is: "+errorMap);
-			csvFile = Utils.getCSVFile("./"+prop.getProperty("ERROR_CSV_FILE_NAME").replace("{change}", chgObj.getName()),errorMap, 
-					Arrays.asList("Item Number", "Attribute Name"), prop.getProperty("DATA_CSV_DELIMITER"), null, null);
+			logger.info("Missing data for "+chgObj.getName()+" is: "+errorMap);
+			csvFile = Utils.getCSVFile(prop.getProperty("ERROR_FILE_PATH")+prop.getProperty("ERROR_CSV_FILE_NAME").replace("{change}", chgObj.getName()),errorMap, 
+					Arrays.asList("Item Number", "Attribute Name"), prop.getProperty("DATA_CSV_DELIMITER"), null, null,logger);
 			if (csvFile != null) {
-				Utils.sendEmail(csvFile,prop, logger);
+				EmailVO emailVO = new EmailVO();
+	 			emailVO.setToEmail(prop.getProperty("ERROR_EMAIL_TO"));
+	 			emailVO.setCcEmail(prop.getProperty("ERROR_EMAIL_CC"));
+	 			emailVO.setFromEmail(prop.getProperty("ERROR_EMAIL_FROM"));
+	 			emailVO.setSubjectEmail(prop.getProperty("ERROR_EMAIL_SUBJECT")
+	 					.replace("{Change}", chgObj.getName()));
+	 			emailVO.setBodyEmail(prop.getProperty("ERROR_EMAIL_BODY"));
+	 			emailVO.setContentType(prop.getProperty("ERROR_EMAIL_CONTENT_TYPE"));
+	 			emailVO.setPriorityEmail(prop.getProperty("ERROR_EMAIL_PRIORITY"));
+				Utils.sendEmail(emailVO , new File [] {csvFile.toFile()},prop, logger);
 				throw new CustomException(prop.getProperty("ERR_MSG_MISSING_DATA"));
 			}
 		}
 	}
 
-	private List<String> getItemAttrList(IItem affItemObj, Map<String,String> attrProp) throws NumberFormatException, APIException {
+	private List<String> getItemAttrList(IItem affItemObj, Map<String,String> attrPropMap) throws NumberFormatException, APIException {
 		List<String> itemDtls = new ArrayList<String>();
 
-		Set<String> propSet = attrProp.keySet();
+		Set<String> propSet = attrPropMap.keySet();
 		
 		Iterator<String> propItr = propSet.iterator();
 		String attrKey = null;
-		
+		SimpleDateFormat revDateformat = new SimpleDateFormat(prop.getProperty("LMS_DATE_FORMAT"));
 		while (propItr.hasNext()) {
 			Object itemAttrAglVal = null;
 			Object aglVal = null;
 			attrKey = propItr.next();
-			String [] attrProps = attrProp.get(attrKey).split(";");
+			String [] attrProps = attrPropMap.get(attrKey).split(";");
 			int propNo = 1;
-			for(String attrprop : attrProps){
+			for(String attrProp : attrProps){
 				switch (propNo) {
 				case 1  : 
-					logger.info(attrKey + ": 1st  Token-"+attrprop);
-					itemAttrAglVal = attrprop;
+					//logger.info(attrKey + ": 1st  Token-"+attrprop);
+					itemAttrAglVal = attrProp;
 					break;
 				case 2  :
-					logger.info(attrKey + ": 2nd  Token-"+attrprop);
-					if (!StringUtils.isEmpty(attrprop)) {
+					//logger.info(attrKey + ": 2nd  Token-"+attrprop);
+					if (!StringUtils.isEmpty(attrProp)) {
 						// switch (aglBaseID){
-						if ("ATTACMENT_REST_URL".equalsIgnoreCase(attrprop)) {
+						if ("ATTACMENT_REST_URL".equalsIgnoreCase(attrProp)) {
 							aglVal = getItemAttRestURL(affItemObj.getName(), prop.getProperty("AGL_ITEM_ATTACHMENT_NAME"),
 									prop.getProperty("AGL_ITEM_ATTACHMENT_DESC"));
-						} else if ("ATTACMENT_REST_URL_WITH_VARIABLE".equalsIgnoreCase(attrprop)) {
+						} else if ("ATTACMENT_REST_URL_WITH_VARIABLE".equalsIgnoreCase(attrProp)) {
 							aglVal = "docURL="
 									+ getItemAttRestURL(affItemObj.getName(), prop.getProperty("AGL_ITEM_ATTACHMENT_NAME"),
 											prop.getProperty("AGL_ITEM_ATTACHMENT_DESC"));
-						} else {
-							aglVal = affItemObj
-									.getValue(NumberUtils.isNumber(attrprop) ? Integer.parseInt(attrprop) : attrprop);
+						} 
+						else if("1014".equals(attrProp)){
+							try {
+								aglVal = Integer.parseInt(affItemObj.getRevision());
+							} catch (NumberFormatException e) {
+								logger.error(e.getMessage());
+							}
+							catch (Exception e) {
+								logger.error(e.getMessage());
+							}
 						}
-						if(aglVal !=null && !aglVal.toString().isEmpty())
+						else {
+							ICell cell = affItemObj
+									.getCell(NumberUtils.isNumber(attrProp) ? Integer.parseInt(attrProp) : attrProp);
+							if (cell != null) {
+								if (cell.getDataType() == DataTypeConstants.TYPE_DATE) {
+									try {
+										aglVal = revDateformat.format(cell.getValue());
+									} catch (Exception e) {
+										logger.error(e.getMessage(), e);
+										aglVal = cell.getValue();
+									}
+								} else {
+									aglVal = cell.getValue();
+								}
+							}
+
+						}
+						if(aglVal !=null && !aglVal.toString().isEmpty()){
 							itemAttrAglVal = aglVal;
+						}
 					}
-					logger.info(attrKey + ": 2nd  Token-"+attrprop+"="+itemAttrAglVal);
+					//logger.info(attrKey + ": 2nd  Token-"+attrprop+"="+itemAttrAglVal);
 					break;
 				
 				case 3 : 
-					logger.info(attrKey + ": 3rd  Token-"+attrprop);
-					if("Y".equalsIgnoreCase(attrprop) && (itemAttrAglVal == null || itemAttrAglVal.toString().isEmpty())){
+					//logger.info(attrKey + ": 3rd  Token-"+attrprop);
+					if("Y".equalsIgnoreCase(attrProp) && (itemAttrAglVal == null || itemAttrAglVal.toString().isEmpty())){
 						logMissingData(affItemObj.getName(), attrKey);
 					}
 					break;
@@ -239,37 +283,6 @@ public class ProcessBO {
 			colList.add(keyVal);
 			errorMap.put(itemName, colList);
 		}
-	}
-	
-	public void printAttr() {
-
-		BufferedReader br = null;
-		Map<String, String> propMap = new TreeMap<String, String>();
-		try {
-			br = new BufferedReader(
-					new FileReader("D:/Agile/Agile934/integration/sdk/extensions/attributeConfig.properties"));
-			String line = br.readLine();
-			while (line != null && !line.isEmpty()) {
-				String key = line.split("=")[0];
-				String val = line.split("=")[1];
-				propMap.put(key, val);
-				line = br.readLine();
-			}
-		} catch (Exception e) {
-		}
-		System.out.println(propMap);
-
-	}
-	
-	public static void main(String [] args){
-		ProcessBO ob = new ProcessBO();
-		try {
-			ob.init();
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-		ob.printAttr();
 	}
 
 }
