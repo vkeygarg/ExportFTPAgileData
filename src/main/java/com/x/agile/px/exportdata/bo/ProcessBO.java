@@ -1,14 +1,11 @@
 package com.x.agile.px.exportdata.bo;
 
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileReader;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.nio.file.Path;
 import java.text.DateFormat;
-import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -19,12 +16,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
-import java.util.TreeMap;
+import java.util.TimeZone;
 
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.math.NumberUtils;
 import org.apache.log4j.Logger;
-import org.apache.log4j.PropertyConfigurator;
 
 import com.agile.api.APIException;
 import com.agile.api.ChangeConstants;
@@ -35,7 +31,6 @@ import com.agile.api.IChange;
 import com.agile.api.IItem;
 import com.agile.api.ITable;
 import com.agile.api.ITwoWayIterator;
-import com.agile.api.ItemConstants;
 import com.x.agile.px.exportdata.exception.CustomException;
 import com.x.agile.px.exportdata.util.Utils;
 import com.x.agile.px.exportdata.vo.EmailVO;
@@ -74,6 +69,7 @@ public class ProcessBO {
 		DELIMITER = prop.getProperty("DATA_CSV_DELIMITER");
 		Calendar calobj = Calendar.getInstance();
 		DateFormat df = new SimpleDateFormat("yyMMddHHmmss");
+		df.setTimeZone(TimeZone.getTimeZone(prop.getProperty("LMS_TIMEZONE")));
 		timeStamp = df.format(calobj.getTime());
 		logger.info("Triggered at:"+timeStamp);
 	}
@@ -100,8 +96,8 @@ public class ProcessBO {
 				attrList = getItemAttrList(affItemObj, attrPropMap);
 				itemsMap.put(affItemObj.getName(), attrList);
 				logger.info("Getting Attribute details for : "+affItemObj.getName());
-				attrListMod = getItemAttrList(affItemObj, attrModPropMap);
-				itemsMapMod.put(affItemObj.getName(), attrListMod);
+				//attrListMod = getItemAttrList(affItemObj, attrModPropMap);
+				//itemsMapMod.put(affItemObj.getName(), attrListMod);
 			}
 		}
 
@@ -150,11 +146,12 @@ public class ProcessBO {
 		
 		Iterator<String> propItr = propSet.iterator();
 		String attrKey = null;
-		SimpleDateFormat revDateformat = new SimpleDateFormat(prop.getProperty("LMS_DATE_FORMAT"));
+		
 		while (propItr.hasNext()) {
 			Object itemAttrAglVal = null;
 			Object aglVal = null;
 			attrKey = propItr.next();
+			
 			String [] attrProps = attrPropMap.get(attrKey).split(";");
 			int propNo = 1;
 			for(String attrProp : attrProps){
@@ -167,46 +164,46 @@ public class ProcessBO {
 					//logger.info(attrKey + ": 2nd  Token-"+attrprop);
 					if (!StringUtils.isEmpty(attrProp)) {
 						// switch (aglBaseID){
-						if ("ATTACMENT_REST_URL".equalsIgnoreCase(attrProp)) {
-							aglVal = getItemAttRestURL(affItemObj.getName(), prop.getProperty("AGL_ITEM_ATTACHMENT_NAME"),
-									prop.getProperty("AGL_ITEM_ATTACHMENT_DESC"));
-						} else if ("ATTACMENT_REST_URL_WITH_VARIABLE".equalsIgnoreCase(attrProp)) {
-							aglVal = "docURL="
-									+ getItemAttRestURL(affItemObj.getName(), prop.getProperty("AGL_ITEM_ATTACHMENT_NAME"),
-											prop.getProperty("AGL_ITEM_ATTACHMENT_DESC"));
-						} 
-						else if("1014".equals(attrProp)){
+						if (attrKey.endsWith("_APP_ID")) {
+							aglVal = getCellValue(affItemObj, attrProp);
+							if (aglVal != null && !aglVal.toString().isEmpty()) {
+								itemAttrAglVal = aglVal.toString();
+							}
 							try {
-								aglVal = Integer.parseInt(affItemObj.getRevision());
+								itemAttrAglVal = itemAttrAglVal + "-" + Integer.parseInt(affItemObj.getRevision());
 							} catch (NumberFormatException e) {
 								logger.error(e.getMessage());
 							}
-							catch (Exception e) {
-								logger.error(e.getMessage());
-							}
-						}
-						else {
-							ICell cell = affItemObj
-									.getCell(NumberUtils.isNumber(attrProp) ? Integer.parseInt(attrProp) : attrProp);
-							if (cell != null) {
-								if (cell.getDataType() == DataTypeConstants.TYPE_DATE) {
-									try {
-										aglVal = revDateformat.format(cell.getValue());
-									} catch (Exception e) {
-										logger.error(e.getMessage(), e);
-										aglVal = cell.getValue();
-									}
-								} else {
-									aglVal = cell.getValue();
+							
+						} else {
+							if ("ATTACMENT_REST_URL".equalsIgnoreCase(attrProp)) {
+								aglVal = getItemAttRestURL(affItemObj.getName(), affItemObj.getRevision(),
+										prop.getProperty("AGL_ITEM_ATTACHMENT_NAME"),
+										prop.getProperty("AGL_ITEM_ATTACHMENT_DESC"));
+							} else if ("ATTACMENT_REST_URL_WITH_VARIABLE".equalsIgnoreCase(attrProp)) {
+								aglVal = "docURL=" + getItemAttRestURL(affItemObj.getName(), affItemObj.getRevision(),
+										prop.getProperty("AGL_ITEM_ATTACHMENT_NAME"),
+										prop.getProperty("AGL_ITEM_ATTACHMENT_DESC"));
+							} else if ("1014".equals(attrProp)) {
+								try {
+									aglVal = Integer.parseInt(affItemObj.getRevision());
+								} catch (NumberFormatException e) {
+									logger.error(e.getMessage());
+								} catch (Exception e) {
+									logger.error(e.getMessage());
 								}
+							} else {
+								aglVal = getCellValue(affItemObj, attrProp);
 							}
 
+							if (aglVal != null && !aglVal.toString().isEmpty()) {
+								itemAttrAglVal = aglVal.toString();
+							}
 						}
-						if(aglVal !=null && !aglVal.toString().isEmpty()){
-							itemAttrAglVal = aglVal;
-						}
+
+						// logger.info(attrKey + ": 2nd
+						// Token-"+attrprop+"="+itemAttrAglVal);
 					}
-					//logger.info(attrKey + ": 2nd  Token-"+attrprop+"="+itemAttrAglVal);
 					break;
 				
 				case 3 : 
@@ -256,12 +253,38 @@ public class ProcessBO {
 		return itemDtls;
 	}
 
-	private String getItemAttRestURL(String itemName, String fileName, String fileDesc) {
+	private Object getCellValue(IItem affItemObj, String attrProp) {
+		Object aglVal = null;
+		SimpleDateFormat revDateformat = new SimpleDateFormat(prop.getProperty("LMS_DATE_FORMAT"));
+		revDateformat.setTimeZone(TimeZone.getTimeZone(prop.getProperty("LMS_TIMEZONE")));
+		try{
+		ICell cell = affItemObj
+				.getCell(NumberUtils.isNumber(attrProp) ? Integer.parseInt(attrProp) : attrProp);
+		if (cell != null) {
+			if (cell.getDataType() == DataTypeConstants.TYPE_DATE) {
+				try {
+					aglVal = revDateformat.format(cell.getValue()).toUpperCase();
+				} catch (Exception e) {
+					logger.error(e.getMessage(), e);
+					aglVal = cell.getValue();
+				}
+			} else {
+				aglVal = cell.getValue();
+			}
+		}
+		}catch(APIException e){
+			logger.error(e.getMessage(),e);
+		}
+		return aglVal ;
+	}
+
+	private String getItemAttRestURL(String itemName,String rev, String fileName, String fileDesc) {
 		StringBuilder uri = new StringBuilder(prop.getProperty("AGL_REST_CALL_URL"));
 
 		try {
 			uri.append("?itemName=" + URLEncoder.encode(itemName, "UTF-8"));
-
+			if (!StringUtils.isEmpty(rev))
+				uri.append("&itemRev=" + URLEncoder.encode(rev, "UTF-8"));
 			if (!StringUtils.isEmpty(fileName))
 				uri.append("&fileName=" + URLEncoder.encode(fileName, "UTF-8"));
 			if (!StringUtils.isEmpty(fileDesc))
