@@ -83,7 +83,6 @@ public class ProcessBO {
 		List<String> attrList = null;
 		
 		Map<String, List<String>> itemsMapMod = new HashMap<String, List<String>>();
-		List<String> attrListMod = null;
 		String lmsID = "";
 		Object lmsVal = null;
 		while (affItr.hasNext()) {
@@ -248,7 +247,7 @@ public class ProcessBO {
 			}
 			*/
 			}
-			itemDtls.add(itemAttrAglVal == null ? "" :itemAttrAglVal.toString());
+			itemDtls.add(itemAttrAglVal == null ? "" :itemAttrAglVal.toString().replaceAll("[\n\r]", "").replace(DELIMITER, " "));
 		}
 		return itemDtls;
 	}
